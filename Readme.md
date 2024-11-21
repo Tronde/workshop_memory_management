@@ -134,6 +134,7 @@ Swap:           8191           0        8191
 
 Description from free(1):
 
+```
 DESCRIPTION
        **free**  displays  the  total amount of free and used physical and swap memory in the system, as well as the buffers and caches used by the kernel. The information is gathered by parsing /proc/meminfo. The displayed columns are:
 
@@ -155,6 +156,12 @@ DESCRIPTION
 
        **available**
               Estimation  of  how  much  memory is available for starting new applications, without swapping. Unlike the data provided by the cache or free fields, this field takes into account page cache and also that not all reclaimable memory slabs will be reclaimed due to items being in use (MemAvailable in /proc/meminfo, available on kernels 3.14, emulated on kernels 2.6.27+, otherwise the same as free)
+```
+
+Intersting solution articles:
+
+  * [Why is the memory usage reported by "ps" significantly different from that reported by "free"?](https://access.redhat.com/solutions/22177)
+  * [What is cache in "free -m" output and why is memory utilization high for cache?](https://access.redhat.com/solutions/67610)
 
 ### vmstat
 
@@ -168,6 +175,9 @@ procs -----------memory---------- ---swap-- -----io---- -system-- -------cpu----
  4  0      0  12939   7215  10647    0    0     0    86 2243 3764  3  1 96  0  0  0
  ```
 
+Description from vmstat(8):
+
+```
 FIELD DESCRIPTION FOR VM MODE
    Procs
        r: The number of runnable processes (running or waiting for run time).
@@ -203,3 +213,57 @@ FIELD DESCRIPTION FOR VM MODE
        wa: Time spent waiting for IO.  Prior to Linux 2.5.41, included in idle.
        st: Time stolen from a virtual machine.  Prior to Linux 2.6.11, unknown.
        gu: Time spent running KVM guest code (guest time, including guest nice). 
+```
+
+## Common fields in /proc/meminfo
+
+Example values from some RHEL 9 virtual machine:
+
+```
+~]$ cat /proc/meminfo
+MemTotal:        7869024 kB   <-- RAM in kilobytes
+MemFree:         6720320 kB   <-- RAM that is currently not being used by any process or the kernel
+MemAvailable:    6910856 kB   <-- An estimate of how much memory is available for starting new applications, without swapping
+Buffers:            2780 kB   <-- block device I/O buffers such as file system cache
+Cached:           407280 kB   <-- Page cache, which stores data read from disk
+SwapCached:            0 kB
+Active:           730368 kB   <-- The amount of memory that has been recently accessed and is not easily reclaimable
+Inactive:          90028 kB   <-- The amount of memory that has not been used recently but is still in memory
+                                  Data that hasn't been accessed for a while
+                                  This memory could be swapped out or reclaimed if needed
+Active(anon):     438180 kB
+Inactive(anon):        0 kB
+Active(file):     292188 kB
+Inactive(file):    90028 kB
+Unevictable:       12336 kB   <-- Cannot be swapped out, even under memory pressure
+SwapTotal:       3145724 kB   <-- Total amount of swap space available (in kilobytes)
+SwapFree:        3145724 kB   <-- Amount of swap space that is currently unused (in kilobytes)
+Dirty:                20 kB   <-- Memory that has been modified (written to) but not yet written back to disk
+Writeback:             0 kB   <-- Amount of memory that is currently being written back to the disk
+AnonPages:        410516 kB   <-- Pages used for e.g. heap and stack and not backed by any file
+Mapped:           196496 kB   <-- Amount of memory that is mapped into the address space of processes, including libraries and shared memory
+Shmem:             27844 kB   <-- E.g. shared libs, mapped files, inter-process communication (IPC), tmpfs
+Slab:             125016 kB   <-- The amount of memory used by the kernel for managing various objects, like file descriptors, network buffers, etc.
+SReclaimable:      66492 kB   <-- Can be reclaimed if needed, such as caches used by the kernel
+SUnreclaim:        58524 kB   <-- This memory is used by kernel objects that are not easily freed
+PageTables:        10244 kB   <-- Amount of memory used by the page table entries to map virtual to physical memory
+CommitLimit:     7080236 kB   <-- Sum of physical memory and swap space
+Committed_AS:    2306404 kB   <-- Memory that has been committed to processes by the kernel
+VmallocTotal:   34359738367 kB <- Total amount of memory available for vmalloc (virtual memory)
+VmallocUsed:       26752 kB   <-- vmalloc used by the kernel
+AnonHugePages:    104448 kB   <-- Refers to the amount of anonymous memory allocated using huge pages
+                                  Can be larger than HugePages_Total because the kernel may dynamically allocate huge pages for anonymous memory
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+FileHugePages:         0 kB
+FilePmdMapped:         0 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+DirectMap4k:      141168 kB   <-- Directly mapped into virutal address space without page table
+DirectMap2M:     5101568 kB
+DirectMap1G:     5242880 kB
+```
