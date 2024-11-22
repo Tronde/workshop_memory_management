@@ -257,13 +257,108 @@ ShmemHugePages:        0 kB
 ShmemPmdMapped:        0 kB
 FileHugePages:         0 kB
 FilePmdMapped:         0 kB
-HugePages_Total:       0
-HugePages_Free:        0
-HugePages_Rsvd:        0
-HugePages_Surp:        0
+HugePages_Total:       0      <-- Refers to the total number of huge pages currently allocated in the system
+HugePages_Free:        0      <-- Refers to the number of huge pages that are currently available for use but are not yet allocated
+HugePages_Rsvd:        0      <-- Shows how many huge pages are reserved but not actively used
+HugePages_Surp:        0      <-- Represents extra huge pages that the system has allocated beyond the initial configured amount, essentially acting as a buffer to handle additional memory pressure
 Hugepagesize:       2048 kB
-Hugetlb:               0 kB
 DirectMap4k:      141168 kB   <-- Directly mapped into virutal address space without page table
 DirectMap2M:     5101568 kB
 DirectMap1G:     5242880 kB
 ```
+
+## Virtual memory parameters
+
+Documentation: [Configuring an operating system to optimize memory access](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/monitoring_and_managing_system_status_and_performance/configuring-an-operating-system-to-optimize-memory-access_monitoring-and-managing-system-status-and-performance#virtual-memory-parameters_configuring-an-operating-system-to-optimize-memory-access)
+
+### Dirty Pages
+
+  * When the kernel writes to some page in memory, this change is not written back to disk immediatly
+  * The page is being marked as dirty and the `PG_dirty` flag is set
+
+#### Options to control how dirty pages are flushed/written back to disk
+
+  * `/proc/sys/vm/dirty_ratio` contains a percentage value
+    * When this percentage of total system (physical) memory is modified, the system begins writing the modifications to the disk
+    * The default value is 20 percent
+  * `/proc/sys/vm/dirty_background_ratio` contains a percentage value
+    * When this percentage of total system (physical) memory is modified, the system begins writing the modifications to the disk in the background
+    * This should not impact the systems performance
+    * The default value is 10 percent
+  * `/proc/sys/vm/dirty_writeback_centisecs` defines the period when kernel threads wake up to write pages back to disk that are dirty for at least or longer than `/proc/sys/vm/dirty_expire_centisecs`
+
+#### Three stages of writing dirty pages back to disk
+
+  1. **Periodicly** refering to `/proc/sys/vm/dirty_{writeback,expire}_centisecs`
+  2. **Background** refering to `/proc/sys/vm/dirty_background_ratio`
+  3. **Active** refering to `/proc/sys/vm/dirty_ratio`
+
+In stage 3 tasks which produce dirty data are blocked to prevent running out of memory. This will most probably will have a performance impact on your applications.
+
+### /proc/sys/vm/swappiness
+
+  * A value ranging from 0 to 200
+  * Controles the degree to which the system favors reclaiming memory from the anonymous memory pool, or the page cache
+  * Higher values favor file-mapped driven workloads like file-servers or streaming applications that depend on date from files in the storage to reside in memory to reduce I/O latency
+  * Lower values favor workloads like mathematical and number crunching applications which utilize heap and stack structures (anon-mapped memory)
+  * Setting this value to 0 aggressively avoids swapping and increases the risk of processes being killed by the `oom_killer`
+
+Swapping scenarios and risks:
+
+  * As long as swap in use is lower than the amount of inactiva anon memory pages in `/proc/meminfo`, you're good
+  * When swap in use is higher than inactive anon or anon memory pages in `/proc/meminfo`, you need more RAM
+
+### Memory over-allocation/over-commitment
+
+It is not uncommon that applications allocate more memory than they actually need at runtime. To optimize the utulization of physical resources the kernel offers memory over-allocation by offering more virtual memory than is physically available (compare `MemTotal` and `VmallocTotal` in `/proc/meminfo`). [Section 37.3. Virtual memory parameters in Red Hat docs](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/monitoring_and_managing_system_status_and_performance/configuring-an-operating-system-to-optimize-memory-access_monitoring-and-managing-system-status-and-performance#virtual-memory-parameters_configuring-an-operating-system-to-optimize-memory-access) describes to options to influence the kernel's behaviour.
+
+#### /proc/sys/vm/overcommit_memory
+
+  * The default value is 0; the kernel accepts memory allocation requests that fit into `MemTotal` + `swap`
+  * Setting this parameter to 1 the kernel grants allocation requests without any checks; this improves performance with an increasing risk of memory overload (`oom_killer`)
+  * When this parameter is set to 2, the kernel denies requests for memory allocation requests equal to or larger than the sum of the total available `swap` space and the percentage of physical RAM specified in the `overcommit_ratio`
+    * This reduces the risk of overcommitting memory
+    * But is recommended only for systems with swap areas larger than their physical memory
+
+#### /proc/sys/vm/overcommit_ratio
+
+  * Specifies the percentage of physical RAM considered when `overcommit_memory` is set to 2
+  * The default value is 50
+
+## Huge pages
+
+You should consider using **huge pages** (or **HugePages**) in Linux when you are running applications or workloads that involve **large amounts of memory** and require high performance. HugePages can help improve memory management efficiency by reducing the overhead of managing many smaller memory pages and reducing Translation Lookaside Buffer (TLB) misses.
+
+Here are some specific scenarios where using HugePages is beneficial:
+
+### 1. **Memory-Intensive Applications**
+   - **Databases**: Applications like Oracle, MySQL, PostgreSQL, and other database management systems often handle large datasets and can benefit from HugePages. HugePages reduce the overhead associated with managing smaller pages, improving the efficiency of memory access.
+   - **In-Memory Caching**: Applications like Redis, Memcached, or any application that involves large in-memory caches can benefit from HugePages because it reduces the memory fragmentation and overhead caused by managing a large number of small pages.
+
+### 2. **Virtualization**
+   - **Virtual Machines (VMs)**: If you're running a hypervisor (e.g., KVM, Xen, or VMware) and using virtual machines, HugePages can be used to assign large, contiguous memory regions to VMs. This reduces the overhead of managing the memory and improves performance for virtualized workloads.
+   - **Containerized Workloads**: In a containerized environment (like Kubernetes or Docker), using HugePages can also help when running workloads that require high memory efficiency or when containers are used to run memory-intensive applications.
+
+### 3. **High-Performance Computing (HPC)**
+   - **Scientific Computing**: Applications that process large datasets, such as those used in scientific simulations, modeling, or machine learning, can benefit from HugePages. These workloads often need large, contiguous memory blocks and can run faster with HugePages due to lower memory management overhead.
+
+### 4. **Low Latency Systems**
+   - **Real-Time Applications**: For real-time systems, reducing latency is crucial. HugePages minimize the number of page table entries and improve access times to memory. This makes them useful in applications that require predictable response times and high performance, such as audio/video processing, real-time data analytics, or any real-time embedded systems.
+
+### 5. **Reduce TLB Misses**
+   - **Translation Lookaside Buffer (TLB)**: The TLB is a cache used by the CPU to speed up virtual to physical memory address translations. By using HugePages, you reduce the number of page table entries and thus the number of TLB misses. This can improve performance for applications that access large datasets or require frequent memory access.
+
+### When NOT to Use HugePages:
+While HugePages can significantly benefit the scenarios listed above, there are some cases where using HugePages might not be necessary or beneficial:
+- **Small or light workloads**: If your application doesn't use much memory or requires only small amounts of memory, using HugePages may add unnecessary complexity and won't offer any performance benefits.
+- **Limited Memory**: If your system has limited memory or needs to allocate memory dynamically, configuring HugePages can reduce the amount of memory available for other processes. This could lead to fragmentation or reduced available memory for non-huge-page workloads.
+- **Not supported by applications**: Some applications may not benefit from HugePages or might require special configuration to take advantage of them. If your software doesn't support HugePages, there's no need to enable them.
+
+### How to Use HugePages:
+To configure HugePages, you can adjust the following settings:
+1. **Number of HugePages**: Set how many huge pages you want the system to allocate.
+2. **HugePage Size**: The default size is often 2 MB, but on some architectures, it can be 1 GB.
+3. **hugetlbfs Filesystem**: This can be mounted to provide applications with access to huge pages via memory-mapped files.
+
+### Conclusion:
+Use HugePages if you are working with memory-intensive applications, databases, virtual machines, or other high-performance computing tasks that benefit from reduced memory fragmentation and lower overhead in memory management. However, evaluate the trade-offs, especially in systems with limited memory, as HugePages might not be beneficial for all types of workloads.
