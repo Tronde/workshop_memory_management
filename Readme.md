@@ -1,5 +1,33 @@
 # Workshop: Linux/RHEL Memory Management
 
+## Table of contents
+
+```
+## Von Neumann Architecture
+## Virtual Memory and Physical Memory
+## Different ways to check memory utilization
+### top
+### free
+### vmstat
+## Common fields in /proc/meminfo
+## Virtual memory parameters
+### Dirty Pages
+### /proc/sys/vm/swappiness
+### Memory over-allocation/over-commitment
+## Huge pages
+### 1. **Memory-Intensive Applications**
+### 2. **Virtualization**
+### 3. **High-Performance Computing (HPC)**
+### 4. **Low Latency Systems**
+### 5. **Reduce TLB Misses**
+### When NOT to Use HugePages:
+### Conclusion:
+### Configuring huge pages in RHEL
+### Determine if HugePages have improved performance
+## Memory fragmentation
+## Memory defragmentation
+```
+
 ## Von Neumann Architecture
 
 ```
@@ -70,12 +98,12 @@ Below is an ASCII diagram showing the relationship between the **Linux Kernel**,
     |     |    (Page Tables, MMU, etc.) |   |   (Scheduler, Interrupts) |    |
     |     +-----------------------------+   +---------------------------+    |
     +------------------------------------------------------------------------+        
-                                 |                                       |
-                                 v                                       v
-                     +-------------------------------+    +--------------------+
-                     |    Physical Memory (RAM)      |    |       Swap Space   |
-                     |   (Main system memory)        |    |  (Disk-based space)|
-                     +-------------------------------+    +--------------------+
+                                 |                             |
+                                 v                             v
+               +-------------------------------+    +---------------------+
+               |    Physical Memory (RAM)      |    |       Swap Space    |
+               |   (Main system memory)        |    |  (Disk-based space) |
+               +-------------------------------+    +---------------------+
 ```
 
 ### Explanation of the Components:
@@ -158,7 +186,7 @@ DESCRIPTION
               Estimation  of  how  much  memory is available for starting new applications, without swapping. Unlike the data provided by the cache or free fields, this field takes into account page cache and also that not all reclaimable memory slabs will be reclaimed due to items being in use (MemAvailable in /proc/meminfo, available on kernels 3.14, emulated on kernels 2.6.27+, otherwise the same as free)
 ```
 
-Intersting solution articles:
+Interesting solution articles:
 
   * [Why is the memory usage reported by "ps" significantly different from that reported by "free"?](https://access.redhat.com/solutions/22177)
   * [What is cache in "free -m" output and why is memory utilization high for cache?](https://access.redhat.com/solutions/67610)
@@ -337,7 +365,7 @@ Here are some specific scenarios where using HugePages is beneficial:
 
 ### 2. **Virtualization**
    - **Virtual Machines (VMs)**: If you're running a hypervisor (e.g., KVM, Xen, or VMware) and using virtual machines, HugePages can be used to assign large, contiguous memory regions to VMs. This reduces the overhead of managing the memory and improves performance for virtualized workloads.
-   - **Containerized Workloads**: In a containerized environment (like Kubernetes or Docker), using HugePages can also help when running workloads that require high memory efficiency or when containers are used to run memory-intensive applications.
+   - **Containerized Workloads**: In a containerized environment (like Kubernetes or Podman), using HugePages can also help when running workloads that require high memory efficiency or when containers are used to run memory-intensive applications.
 
 ### 3. **High-Performance Computing (HPC)**
    - **Scientific Computing**: Applications that process large datasets, such as those used in scientific simulations, modeling, or machine learning, can benefit from HugePages. These workloads often need large, contiguous memory blocks and can run faster with HugePages due to lower memory management overhead.
@@ -354,11 +382,341 @@ While HugePages can significantly benefit the scenarios listed above, there are 
 - **Limited Memory**: If your system has limited memory or needs to allocate memory dynamically, configuring HugePages can reduce the amount of memory available for other processes. This could lead to fragmentation or reduced available memory for non-huge-page workloads.
 - **Not supported by applications**: Some applications may not benefit from HugePages or might require special configuration to take advantage of them. If your software doesn't support HugePages, there's no need to enable them.
 
-### How to Use HugePages:
-To configure HugePages, you can adjust the following settings:
-1. **Number of HugePages**: Set how many huge pages you want the system to allocate.
-2. **HugePage Size**: The default size is often 2 MB, but on some architectures, it can be 1 GB.
-3. **hugetlbfs Filesystem**: This can be mounted to provide applications with access to huge pages via memory-mapped files.
-
 ### Conclusion:
 Use HugePages if you are working with memory-intensive applications, databases, virtual machines, or other high-performance computing tasks that benefit from reduced memory fragmentation and lower overhead in memory management. However, evaluate the trade-offs, especially in systems with limited memory, as HugePages might not be beneficial for all types of workloads.
+
+### Configuring huge pages in RHEL
+
+See [Chapter 38. Configuring huge pages](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/monitoring_and_managing_system_status_and_performance/configuring-huge-pages_monitoring-and-managing-system-status-and-performance#configuring-huge-pages_monitoring-and-managing-system-status-and-performance) in the [monitoring and managing system status and performance guide](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/monitoring_and_managing_system_status_and_performance/)
+
+### Determine if HugePages have improved performance
+
+#### TLB misses
+
+  * Measure the number of TLB (Translation Lookaside Buffer) misses before and after implementing HugePages
+  * A significant reduction in TLB misses indicates improved performance
+  * This can be done with the `perf`
+
+Example of using `perf` to measure TLB misses:
+
+```
+sudo perf stat -e dTLB-misses,iTLB-misses <command>
+```
+
+  * `dTLB-misses`: Data TLB misses
+  * `iTLB-misses`: Instruction TLB misses
+  * `<command>`: Replace `<command>` with the application or command you want to monitor. For example, to monitor system-wide TLB misses:
+
+```
+sudo perf stat -e dTLB-misses,iTLB-misses -a sleep 10
+```
+
+This will run the `sleep` command for 10 seconds and provide TLB miss statistics during that period.
+
+Sample output:
+
+```
+Performance counter stats for 'sleep 10':
+
+      1,234,567 dTLB-misses
+      987,654 iTLB-misses
+    10.000000 task-clock (msec)
+
+10.003942 seconds time elapsed
+```
+
+#### Application execution time
+
+  * Compare the overall execution time of your application with and without `HugePages` enabled
+  * For example, in one case, using `HugePages` resulted in a 5% faster compile time
+
+#### CPU usage
+
+  * Monitor the CPU usage in kernel mode
+  * A reduction of CPU usage for memory management tasks can indicate improved performance
+
+#### Page table size
+
+  * Check the size of `PageTables` in `/proc/meminfo`
+  * `HugePages` can significantly reduce the page table size, which improves memory management efficiency
+
+#### Monitor Memory fragmentation
+
+  * Lower fragmentation can indicate better memory utilization with `HugePages`
+  * See section 'Memory fragmentation' for details on how to do so
+
+#### Application specific benchmarks
+
+  * Run Run benchmarks tailored to your application's typical workload to compare performance with and without HugePages
+
+## Memory fragmentation
+
+Certainly! Here's an ASCII art representation of **memory fragmentation** in a system:
+
+```
++------------------------+------------------------+------------------------+------------------------+
+|   4KB Page Block       |   8KB Page Block       |   4KB Page Block       |   16KB Page Block      |
+| (Free)                 | (Used by Application)  | (Free)                 | (Used by Application)  |
++------------------------+------------------------+------------------------+------------------------+
+|   4KB Page Block       |   4KB Page Block       |   16KB Page Block      |   4KB Page Block       |
+| (Used by Application)  | (Free)                 | (Free)                 | (Used by Application)  |
++------------------------+------------------------+------------------------+------------------------+
+|   8KB Page Block       |   16KB Page Block      |   4KB Page Block       |   8KB Page Block       |
+| (Free)                 | (Used by Application)  | (Used by Application)  | (Free)                 |
++------------------------+------------------------+------------------------+------------------------+
+|   16KB Page Block      |   8KB Page Block       |   8KB Page Block       |   16KB Page Block      |
+| (Free)                 | (Free)                 | (Used by Application)  | (Used by Application)  |
++------------------------+------------------------+------------------------+------------------------+
+```
+
+**Explanation of the Diagram**:
+
+- **Used Blocks**: Represented by blocks with specific sizes (e.g., 4KB, 8KB, 16KB) that are occupied by applications or processes.
+- **Free Blocks**: Represented by blocks marked as "Free." These are free pages that are not currently being used by any application.
+- **Memory Fragmentation**: The diagram shows how memory is fragmented because there are small, unused blocks scattered throughout the system (e.g., free 4KB blocks and free 8KB blocks). The large free 16KB block is isolated and cannot be used efficiently for an 8KB allocation. Similarly, a system may have plenty of free 4KB blocks but no larger contiguous free block when a large allocation is needed.
+
+**Impact of Fragmentation**:
+- **External Fragmentation**: Even if the total amount of free memory is sufficient, the system might not be able to allocate a large contiguous block due to fragmentation, which can lead to performance issues or allocation failures.
+- **Internal Fragmentation**: If large blocks are allocated but not fully used, smaller portions of memory within those blocks go wasted, although this is not represented here.
+
+### /proc/buddyinfo
+
+The `/proc/buddyinfo` file in Linux provides insight into the system’s **page allocator** and its management of free memory. Specifically, it shows information about the **free pages** available in various **page sizes** (also called **order sizes**). Understanding this file is helpful when diagnosing memory fragmentation issues or understanding how the kernel manages memory.
+
+Here’s an explanation of the structure and how to interpret the data:
+
+**1. Format of the `/proc/buddyinfo` Output**
+
+Each line in the `/proc/buddyinfo` file corresponds to a **memory zone** in the system (e.g., `Normal`, `HighMem`, etc.), and the columns provide details about the number of free pages of different **order sizes** within those zones. The output might look something like this:
+
+```bash
+Node 0, zone      DMA      0      1      1      1      0      0      0
+Node 0, zone   Normal    10     12     5      3      0      0      0
+Node 0, zone  HighMem     5      0      0      0      0      0      0
+```
+
+Let’s break down the key components:
+
+**2. Columns in `/proc/buddyinfo`**
+
+- **Node**: The NUMA node (Non-Uniform Memory Access) number. A NUMA node represents a physical memory region, and each node can have its own local memory. If your system has only one NUMA node, it will always be `Node 0`.
+  
+- **Zone**: This represents the different memory zones in Linux. Common zones include:
+  - `DMA`: The "Direct Memory Access" zone for low-memory devices (typically lower than 16MB).
+  - `Normal`: Regular system memory.
+  - `HighMem`: Memory above a certain threshold (on 32-bit systems, typically above 896MB).
+  
+- **Order**: The "order" refers to the power of 2 of the page size. The default page size is 4KB, so:
+  - **Order 0**: Represents a 4KB page.
+  - **Order 1**: Represents a 8KB page (2^1 = 8KB).
+  - **Order 2**: Represents a 16KB page (2^2 = 16KB).
+  - And so on, with higher orders representing larger page sizes.
+  
+- **Free Pages for Each Order**: The numbers under each order represent the number of **free pages** available for that order size. For example:
+  - **Order 0** shows the number of free pages of 4KB.
+  - **Order 1** shows the number of free pages of 8KB, and so on.
+
+**3. How to Interpret the Information**
+
+**Page Allocation**
+- The kernel allocates pages in powers of two, so it will try to allocate larger blocks of memory (higher order) first. If a large block (e.g., a 16KB block for order 2) is not available, it will try to allocate smaller blocks.
+  
+- The kernel uses the **buddy allocator** to manage memory. The buddy system divides memory into fixed-sized blocks called **buddies** (e.g., 4KB, 8KB, etc.). When a page is freed, it may be merged with a buddy page of the same order size if it is available.
+
+**Fragmentation**
+- **Memory fragmentation** occurs when there are many small, isolated free pages that cannot be used to satisfy larger allocations. High values in the **Order 0** column (small pages) might indicate fragmentation, especially if there are very few free pages for higher orders.
+
+- A system with a large number of free pages at **higher orders** (Order 1, Order 2, etc.) is generally not fragmented and can allocate larger blocks of memory efficiently. A lack of larger free pages can indicate that larger allocations may fail, even though there are many small free pages available.
+
+**Example:**
+
+If you see output like this:
+
+```
+Node 0, zone      DMA      1      0      0      0      0      0      0
+Node 0, zone   Normal    3      2      0      1      0      0      0
+Node 0, zone  HighMem     0      0      0      0      0      0      0
+```
+
+- **Zone DMA** has 1 free page of order 0 (4KB pages), and no larger free pages are available.
+- **Zone Normal** has 3 free pages of order 0, 2 free pages of order 1 (8KB pages), 1 free page of order 3, and no larger free pages.
+- **Zone HighMem** has no free pages at any order.
+
+**What It Means:**
+- **Zone Normal** has a decent number of free pages for low-order sizes, but there are few free pages for larger allocations.
+- **Zone HighMem** is entirely fragmented, with no free pages available at any order. This could lead to issues if the kernel or user applications try to allocate large amounts of memory from HighMem.
+
+**4. Use Cases for Monitoring `/proc/buddyinfo`**
+
+- **Diagnosing Fragmentation**: High numbers of free pages at lower orders and very few at higher orders could indicate fragmentation. This is important for systems that frequently allocate large blocks of memory.
+  
+- **Performance Tuning**: If you're facing issues with memory allocation or performance degradation, `/proc/buddyinfo` can help you identify if fragmentation is a contributing factor.
+
+- **Memory Management Tuning**: In cases where memory allocation failure occurs, examining `/proc/buddyinfo` can reveal whether larger blocks of free memory are available in the system.
+
+**5. Advanced Use Cases**
+
+You can also use the output of `/proc/buddyinfo` to troubleshoot issues with certain kinds of memory allocations, particularly if you have custom memory management policies or a specific workload that uses high-order allocations.
+
+### Conclusion
+
+The `/proc/buddyinfo` file is useful for understanding the state of free pages in various memory zones and their order sizes. By analyzing the free pages at different orders, you can get a sense of how fragmented your system’s memory is and whether larger memory allocations might fail due to fragmentation. It is especially useful for kernel developers, system administrators, or anyone troubleshooting memory issues.
+
+### /proc/pagetypeinfo
+
+The `/proc/pagetypeinfo` file in Linux provides detailed information about the memory allocator, specifically about how the kernel organizes and allocates pages in various **page types**. It is helpful for understanding the internal structure of memory management in Linux, particularly for memory zones, NUMA nodes, and the various **page types** used by the kernel.
+
+This file is mainly useful for kernel developers, system administrators, and advanced users who need to monitor memory usage, troubleshoot memory allocation issues, or debug memory fragmentation. Here's a breakdown of how to interpret the contents of `/proc/pagetypeinfo`.
+
+**1. General Structure of `/proc/pagetypeinfo`**
+
+When you look at the content of `/proc/pagetypeinfo`, it will display detailed information about how free memory is organized in the kernel. The output typically includes multiple sections, each corresponding to a **page type** and showing statistics related to that page.
+
+```bash
+$ cat /proc/pagetypeinfo
+Page block order 0, zone 0
+  free_area: 0
+  free_area: 0
+  free_area: 0
+  free_area: 0
+  free_area: 0
+  free_area: 0
+Page block order 1, zone 1
+  free_area: 5
+  free_area: 3
+  free_area: 2
+  ...
+```
+
+**2. Key Components in the Output**
+
+- **Page Block Order**: Each line corresponds to a **page block order** (referred to as "order"). The order is the power of two for the page size. For example:
+  - **Order 0** corresponds to 4KB pages.
+  - **Order 1** corresponds to 8KB pages.
+  - **Order 2** corresponds to 16KB pages, and so on.
+
+  The **order** field in `/proc/pagetypeinfo` indicates the size of the pages that the kernel is working with. The larger the order, the larger the page block size.
+
+- **Zone**: The memory is divided into different **zones** based on the physical locality of memory. These include zones such as:
+  - `DMA` (Direct Memory Access)
+  - `Normal`
+  - `HighMem` (on 32-bit systems)
+
+  The `zone` field shows which part of the memory the information corresponds to. For example, Zone 0 is typically the `DMA` zone, Zone 1 is the `Normal` zone, etc.
+
+- **Free Area**: The `free_area` represents the list of free pages available in that page block order within a particular zone. The free pages are stored in a linked list. The kernel uses the buddy allocator, which maintains separate lists for each order of pages.
+
+  The line `free_area: X` represents the number of **free page blocks** available at a specific order. Each free page block in the list represents a block of pages of size `2^order` (e.g., order 1 is an 8KB block).
+
+  If there are multiple `free_area` lines for the same order, it indicates that the kernel maintains separate lists for different groups of pages (e.g., different NUMA nodes or different zones).
+
+**3. Example Interpretation**
+
+Here’s an example of the content you might see in `/proc/pagetypeinfo`:
+
+```
+Page block order 0, zone 0
+  free_area: 0
+  free_area: 2
+  free_area: 1
+Page block order 1, zone 1
+  free_area: 3
+  free_area: 0
+  free_area: 5
+Page block order 2, zone 2
+  free_area: 4
+  free_area: 1
+  free_area: 2
+```
+
+Let’s break this down:
+
+- **Page block order 0, zone 0**:
+  - This represents 4KB pages in `zone 0` (possibly the `DMA` zone).
+  - There are 3 entries under `free_area`:
+    - **First free_area: 0** indicates that there are **no free page blocks** of size 4KB in this list.
+    - **Second free_area: 2** indicates that there are **2 free page blocks** of size 4KB in this list.
+    - **Third free_area: 1** indicates that there is **1 free page block** of size 4KB in another list.
+
+- **Page block order 1, zone 1**:
+  - This corresponds to 8KB pages in `zone 1` (which might be the `Normal` zone).
+  - There are 3 entries:
+    - **First free_area: 3** indicates there are **3 free page blocks** of 8KB.
+    - **Second free_area: 0** indicates there are **no free page blocks** of 8KB in another list.
+    - **Third free_area: 5** indicates there are **5 free page blocks** of 8KB in yet another list.
+
+- **Page block order 2, zone 2**:
+  - This corresponds to 16KB pages in `zone 2` (possibly the `HighMem` zone).
+  - There are 3 entries:
+    - **First free_area: 4** indicates that there are **4 free page blocks** of 16KB.
+    - **Second free_area: 1** indicates that there is **1 free page block** of 16KB in another list.
+    - **Third free_area: 2** indicates there are **2 free page blocks** of 16KB in yet another list.
+
+**4. Advanced Interpretation and Use Cases**
+
+- **Memory Fragmentation**: If there are large numbers of free page blocks at lower orders (e.g., `free_area: 10` for order 0), it might indicate fragmentation, as these represent small blocks of memory that might not be able to satisfy larger allocations. This can be problematic if your system or applications require large contiguous memory blocks.
+
+- **NUMA (Non-Uniform Memory Access)**: On NUMA systems, you might see multiple entries for each order size in the output. The different free areas correspond to different NUMA nodes. This can help you understand how memory is distributed across different memory zones and NUMA nodes.
+
+- **Kernel Performance Tuning**: By understanding how free pages are distributed across different orders and zones, you can gain insight into the performance of the kernel’s memory allocator. For instance, a system with many free low-order pages but few free high-order pages might struggle with allocating large contiguous blocks of memory, which can lead to performance degradation.
+
+- **Memory Allocation Failures**: If your system is unable to allocate memory and you’re troubleshooting, `/proc/pagetypeinfo` can help determine if memory fragmentation is the cause. If the system can't find a free block large enough to satisfy a high-order request, this could be a sign of fragmentation.
+
+**5. Summary**
+
+The `/proc/pagetypeinfo` file provides detailed information about the distribution of free pages in memory by **order size** and **zone**. The free pages are listed in `free_area`, with each entry showing how many blocks of a particular size are available in different memory zones or lists. By analyzing this data, you can gain insights into memory fragmentation, allocation failures, and NUMA-related performance issues. This file is mostly useful for kernel-level debugging, performance tuning, and advanced memory management tasks.
+
+## Memory defragmentation
+
+**1. Automatic Kernel Management**
+
+Linux has built-in mechanisms to handle memory fragmentation automatically. The two main processes responsible for this are **`kcompactd`** and **`kswapd`**:
+
+- **`kswapd`**: This kernel thread manages the swapping process, moving pages from RAM to swap space when memory is under pressure. It helps ensure that the system has enough free memory by swapping out less-used pages.
+
+- **`kcompactd`**: This kernel thread attempts to **defragment memory** by consolidating free memory pages into larger contiguous blocks, which can improve the system's ability to allocate larger memory chunks when needed.
+
+These processes are triggered automatically by the kernel when the system detects memory pressure, so you don't need to intervene manually in most cases. To monitor how often these processes are triggered, you can check `/proc/vmstat` and `/proc/meminfo`.
+
+**2. Clearing Cached Data**
+
+Linux uses a page cache to store recently accessed file data, which improves I/O performance. However, if the cache grows too large, it can contribute to memory fragmentation. In certain situations, clearing the cache can help reclaim memory and reduce fragmentation.
+
+To manually drop the page cache and free memory, use the following commands:
+
+```bash
+sudo sync  # Ensure all dirty pages are written to disk
+sudo echo 3 > /proc/sys/vm/drop_caches  # Clears page cache, dentries, and inodes
+```
+
+This process clears cached data that may be using up memory, freeing up space for new allocations. While it doesn't directly "defragment" memory, it can help by freeing up scattered memory pages, which could help reduce fragmentation in certain cases.
+
+**3. Rebooting the System**
+
+A **system reboot** is the most drastic method to clear memory fragmentation. Rebooting the system resets the memory layout by clearing all allocated memory and starting fresh. This effectively "defragments" memory by releasing all pages, thus eliminating fragmentation caused by prolonged memory usage.
+
+However, rebooting is a temporary solution and is generally not recommended unless necessary, as it disrupts the system and doesn't address the underlying causes of fragmentation. It's useful when you need a quick fix and have no other way to reclaim memory.
+
+**4. Memory Compaction with `sysctl`**
+
+Linux provides a way to manually trigger **memory compaction** through the `sysctl` interface. This operation attempts to consolidate smaller free memory blocks into larger, contiguous blocks, which can help reduce fragmentation.
+
+To trigger memory compaction manually:
+```bash
+echo 1 > /proc/sys/vm/compact_memory
+```
+
+This command tells the kernel to try to compact memory, which can help create larger contiguous free blocks that can be used for allocation. Typically, memory compaction is performed automatically under memory pressure, but you can use this command to initiate it manually when needed.
+
+---
+
+### **Summary**
+
+To mitigate memory fragmentation in Linux, you can use the following strategies:
+
+1. The kernel **automatically handles memory compaction** and swapping through processes like `kcompactd` and `kswapd`.
+2. **Clearing cached data** can free memory, which may reduce fragmentation.
+3. **Rebooting the system** clears all memory and resets memory fragmentation, though it's a temporary fix.
+4. **Manually triggering memory compaction** using `sysctl` helps consolidate fragmented memory into larger contiguous blocks.
+
+These strategies can help optimize memory allocation and alleviate memory fragmentation on Linux systems.
