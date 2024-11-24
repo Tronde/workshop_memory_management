@@ -3,6 +3,7 @@
 This `Readme.md` includes data, information, and knowledge for a memory management workshop. It covers the topics mentioned in the following table of contents.
 
 Author: Joerg Kastning
+
 Licence: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
 ## Table of contents
