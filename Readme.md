@@ -4,7 +4,7 @@ This `Readme.md` includes data, information, and knowledge for a memory manageme
 
 Author: Joerg Kastning
 
-Licence: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+License: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 
 ## Table of contents
 
@@ -327,7 +327,7 @@ Documentation: [Configuring an operating system to optimize memory access](https
   2. **Background** refering to `/proc/sys/vm/dirty_background_ratio`
   3. **Active** refering to `/proc/sys/vm/dirty_ratio`
 
-In stage 3 tasks which produce dirty data are blocked to prevent running out of memory. This will most probably will have a performance impact on your applications.
+In stage 3 tasks which produce dirty data are blocked to prevent running out of memory. This, most probably will have a performance impact on your applications.
 
 ### /proc/sys/vm/swappiness
 
